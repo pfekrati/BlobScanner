@@ -10,11 +10,13 @@ namespace BlobScanner.ResultProcessor
         private BlobContainerClient quarantineContainerClient;
         private DefaultAzureCredentialOptions credentialOptions;
 
-        public QuarantineClient(Uri quarantineContainerUrl)
+        public QuarantineClient(Uri quarantineContainerUrl, string managedIdentityClientId = null)
         {
             credentialOptions = new DefaultAzureCredentialOptions();
             credentialOptions.Diagnostics.IsLoggingEnabled = true;
             credentialOptions.Diagnostics.IsLoggingContentEnabled = true;
+            if (!String.IsNullOrEmpty(managedIdentityClientId))
+                credentialOptions.ManagedIdentityClientId = managedIdentityClientId;
             quarantineContainerClient = new BlobContainerClient(quarantineContainerUrl, new DefaultAzureCredential(credentialOptions));
         }
 

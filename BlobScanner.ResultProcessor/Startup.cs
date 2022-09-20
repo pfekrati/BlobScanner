@@ -18,7 +18,8 @@ namespace BlobScanner.ResultProcessor
             builder.Services.AddSingleton<ILogAnalyticsClient>(_ => new LogAnalyticsClient(config["LogAnalyticsCustomerId"], 
                                                                                            config["LogAnalyticsSharedKey"]));
 
-            builder.Services.AddSingleton<IQuarantineClient>(_ => new QuarantineClient(new Uri(config["QuarantineContainerUrl"])));
+            builder.Services.AddSingleton<IQuarantineClient>(_ => new QuarantineClient(new Uri(config["QuarantineContainerUrl"]),
+                                                                                       config["ManagedIdentityClientId"]));
         }
     }
 }
