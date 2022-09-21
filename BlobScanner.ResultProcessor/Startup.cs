@@ -20,6 +20,8 @@ namespace BlobScanner.ResultProcessor
 
             builder.Services.AddSingleton<IQuarantineClient>(_ => new QuarantineClient(new Uri(config["QuarantineContainerUrl"]),
                                                                                        config["ManagedIdentityClientId"]));
+
+            builder.Services.Add(new ServiceDescriptor(typeof(IMetricsClient), typeof(MetricsClient), ServiceLifetime.Singleton));
         }
     }
 }
