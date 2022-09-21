@@ -5,6 +5,6 @@ namespace BlobScanner.ResultProcessor
 {
     public interface IQuarantineClient
     {
-        Task<Uri> Quarantine(Uri sourceBlobUrl);
+        Task<string> Quarantine(Uri sourceBlobUrl);
     }
 }

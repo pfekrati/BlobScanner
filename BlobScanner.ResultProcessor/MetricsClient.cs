@@ -5,7 +5,7 @@ namespace BlobScanner.ResultProcessor
 {
     public class MetricsClient : IMetricsClient
 	{
-        private TelemetryClient telemetryClient;
+        private readonly TelemetryClient telemetryClient;
         
         public MetricsClient(TelemetryConfiguration telemetryConfiguration)
         {

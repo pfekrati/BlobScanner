@@ -12,9 +12,9 @@ namespace BlobScanner.ResultProcessor
 {
     public class ResultProcessor
     {
-        private ILogAnalyticsClient logAnalyticsClient;
-        private IMetricsClient metricsClient;
-        private IQuarantineClient quarantineClient;
+        private readonly ILogAnalyticsClient logAnalyticsClient;
+        private readonly IMetricsClient metricsClient;
+        private readonly IQuarantineClient quarantineClient;
 
         public ResultProcessor(ILogAnalyticsClient logAnalyticsClient, IMetricsClient metricsClient, IQuarantineClient quarantineClient)
         {
@@ -37,8 +37,7 @@ namespace BlobScanner.ResultProcessor
             {
                 if (result.IsThreat)
                 {
-                    var quarantineUrl = await quarantineClient.Quarantine(result.BlobUrl);
-                    result.Result = $"Quarantined to {quarantineUrl}";
+                    result.Result = await quarantineClient.Quarantine(result.BlobUrl);
                     logAnalyticsClient.SendTelemetry(JsonConvert.SerializeObject(result));
                 }
             }
