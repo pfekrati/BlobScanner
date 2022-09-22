@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "BlobScanner.Console": {
+      "commandName": "Project",
+      "commandLineArgs": "blobscannerServiceBus.servicebus.windows.net"
+    }
+  }
+}
