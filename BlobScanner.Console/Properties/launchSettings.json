@@ -2,7 +2,7 @@
   "profiles": {
     "BlobScanner.Console": {
       "commandName": "Project",
-      "commandLineArgs": "blobscannerServiceBus.servicebus.windows.net"
+      "commandLineArgs": "blobscannerServiceBus.servicebus.windows.net https://blobscannerintegration.canadacentral-1.eventgrid.azure.net/api/events"
     }
   }
 }

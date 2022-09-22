@@ -8,6 +8,10 @@ using System.IO;
 using MVsDotNetAMSIClient;
 using System.Linq;
 using MVsDotNetAMSIClient.Contracts;
+using Azure.Messaging.EventGrid;
+using BlobScanner.ConsoleApp.Model;
+using System.Collections.Generic;
+using System.Reflection.Metadata;
 
 namespace BlobScanner.ConsoleApp
 {
@@ -20,7 +24,7 @@ namespace BlobScanner.ConsoleApp
         static BlobClient blobClient;
         static ServiceBusClient serviceBusClient;
         static ServiceBusSender sender;
-
+        static EventGridPublisherClient eventGridclient;
 
         // handle received messages
         static async Task MessageHandler(ProcessMessageEventArgs args)
@@ -61,8 +65,12 @@ namespace BlobScanner.ConsoleApp
         {
 
             var serviceBusServer = args[0];
+            var eventGridServer = args[1];
+
             serviceBusClient = new ServiceBusClient(serviceBusServer, new DefaultAzureCredential());
             sender = serviceBusClient.CreateSender(resultsQueueName);
+            eventGridclient = new EventGridPublisherClient(new Uri(eventGridServer), new DefaultAzureCredential());
+
             ServiceBusProcessor processor = serviceBusClient.CreateProcessor(queueName, new ServiceBusProcessorOptions());
 
 
@@ -93,16 +101,63 @@ namespace BlobScanner.ConsoleApp
             Console.WriteLine($"File downloaded successfully {blobUrl}");
             Console.WriteLine($"Scanning file {blobUrl}");
             var configuration = new AMSIClientConfiguration();
-            //var scanResult = new Scan(configuration, 2, TimeSpan.FromSeconds(1)).Buffer(fileContent, fileContent.Length, blobUrl.Split("/").Last());
-            var scanResult = new Scan().Buffer(fileContent, fileContent.Length, blobUrl.Split("/").Last());
+            var scanResult = new Scan(configuration, 2, TimeSpan.FromSeconds(1)).Buffer(fileContent, fileContent.Length, blobUrl.Split("/").Last());
             Console.WriteLine($"File scanned succcessfully {blobUrl}");
+
+            var resultModel = BuildResultModel(scanResult, blobUrl, blobUrl.Split("/").Last());
+
+            IDictionary<string, string> metadata = new Dictionary<string, string>();
+
+            metadata.Add("BlobScanner_ScanDateTime", scanResult.TimeStamp.ToString());
+            metadata.Add("BlobScanner_IsSafe", scanResult.IsSafe.ToString());
+            metadata.Add("BlobScanner_ScanResult", scanResult.Result.ToString());
+            metadata.Add("BlobScanner_DetectionEngine", scanResult.DetectionEngineInfo.DetectionEngine.ToString());
+
+
+            Console.WriteLine($"Sending scan result message");
+            await SendMessage(resultModel);
+            if (!scanResult.IsSafe)
+            {
+                Console.WriteLine($"Sending integration event");
+                await SendIntegrationEvent(resultModel);
+            }
+
+            await blobClient.SetMetadataAsync(metadata);
+
+            Console.WriteLine($"Job completed successfully");
+
         }
 
-        static async Task SendMessage(ScanResult scanResult)
+        static async Task SendMessage(ScanResultModel resultModel)
         {
-
-            ServiceBusMessage message = new ServiceBusMessage("");
+            ServiceBusMessage message = new ServiceBusMessage(JsonConvert.SerializeObject(resultModel));
             await sender.SendMessageAsync(message);
+        }
+
+        static ScanResultModel BuildResultModel(ScanResult scanResult, string fileUrl, string fileName)
+        {
+            var resultModel = new ScanResultModel
+            {
+                BlobName = fileName,
+                BlobUrl = fileUrl,
+                DetectionEngineInfo = scanResult.DetectionEngineInfo.DetectionEngine.ToString(),
+                IsThreat = !scanResult.IsSafe,
+                Result = scanResult.Result.ToString(),
+                ResultDetail = scanResult.ResultDetail,
+                Timestamp = scanResult.TimeStamp
+            };
+            return resultModel;
+        }
+
+        static async Task SendIntegrationEvent(ScanResultModel resultModel)
+        {
+            EventGridEvent egEvent =
+                new EventGridEvent(
+                    "BlobScannerScanResult",
+                    "BlobScanner.InfectedFileFound",
+                    "1.0",
+                    JsonConvert.SerializeObject(resultModel));
+            await eventGridclient.SendEventAsync(egEvent);
         }
     }
 }
