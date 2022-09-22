@@ -5,37 +5,47 @@ using Azure.Messaging.ServiceBus;
 using Azure.Storage.Blobs;
 using Newtonsoft.Json;
 using System.IO;
-
+using MVsDotNetAMSIClient;
+using System.Linq;
+using MVsDotNetAMSIClient.Contracts;
 
 namespace BlobScanner.ConsoleApp
 {
     class Program
     {
 
-        // name of the Service Bus topic
-        static string queueName = "filesqueue";
-
-        // the client that owns the connection and can be used to create senders and receivers
-        static ServiceBusClient serviceBusClient;
-
-        // the processor that reads and processes messages from the subscription
-        static ServiceBusProcessor processor;
+        const string queueName = "filesqueue";
+        const string resultsQueueName = "resultsqueue";
 
         static BlobClient blobClient;
+        static ServiceBusClient serviceBusClient;
+        static ServiceBusSender sender;
+
 
         // handle received messages
         static async Task MessageHandler(ProcessMessageEventArgs args)
         {
-            string body = args.Message.Body.ToString();
+            try
+            {
+                Console.WriteLine($"New message recieved. Timestamp: {DateTime.Now}");
+                string body = args.Message.Body.ToString();
 
-            var convertedBody = JsonConvert.DeserializeObject<dynamic>(body);
+                var convertedBody = JsonConvert.DeserializeObject<dynamic>(body);
 
-            string blobUrl = Convert.ToString(convertedBody.data.url);
+                string blobUrl = Convert.ToString(convertedBody.data.url);
 
-            await GetBlobServiceClient(blobUrl);
+                Console.WriteLine($"Downloading file {blobUrl}");
 
-            // complete the message. messages is deleted from the queue. 
-            await args.CompleteMessageAsync(args.Message);
+                await DownloadAndScanFile(blobUrl);
+
+                await args.CompleteMessageAsync(args.Message);
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(e.Message);
+                Console.WriteLine(e.ToString());
+                throw;
+            }
 
         }
 
@@ -51,34 +61,48 @@ namespace BlobScanner.ConsoleApp
         {
 
             var serviceBusServer = args[0];
-            // Create the clients that we'll use for sending and processing messages.
             serviceBusClient = new ServiceBusClient(serviceBusServer, new DefaultAzureCredential());
+            sender = serviceBusClient.CreateSender(resultsQueueName);
+            ServiceBusProcessor processor = serviceBusClient.CreateProcessor(queueName, new ServiceBusProcessorOptions());
 
-            // create a processor that we can use to process the messages
-            processor = serviceBusClient.CreateProcessor(queueName, new ServiceBusProcessorOptions());
 
-            // add handler to process messages
             processor.ProcessMessageAsync += MessageHandler;
             processor.ProcessErrorAsync += ProcessErrorHandler;
-            
-            // start processing 
+
+            Console.WriteLine("Connecting to Service Bus ...");
             await processor.StartProcessingAsync();
+            Console.WriteLine("Ready to receive messages ...");
 
             Console.ReadKey();
 
-            // stop processing 
             await processor.StopProcessingAsync();
 
         }
-        public static async Task GetBlobServiceClient(string blobUrl)
+        static async Task DownloadAndScanFile(string blobUrl)
         {
-            blobClient = new BlobClient(new Uri(blobUrl), new DefaultAzureCredential());
-            
+            var uri = new Uri(blobUrl);
+            blobClient = new BlobClient(uri, new DefaultAzureCredential());
+            byte[] fileContent;
+
             using (var ms = new MemoryStream())
             {
                 await blobClient.DownloadToAsync(ms);
-                var result = ms.ToArray();
+                fileContent = ms.ToArray();
             }
+
+            Console.WriteLine($"File downloaded successfully {blobUrl}");
+            Console.WriteLine($"Scanning file {blobUrl}");
+            var configuration = new AMSIClientConfiguration();
+            //var scanResult = new Scan(configuration, 2, TimeSpan.FromSeconds(1)).Buffer(fileContent, fileContent.Length, blobUrl.Split("/").Last());
+            var scanResult = new Scan().Buffer(fileContent, fileContent.Length, blobUrl.Split("/").Last());
+            Console.WriteLine($"File scanned succcessfully {blobUrl}");
+        }
+
+        static async Task SendMessage(ScanResult scanResult)
+        {
+
+            ServiceBusMessage message = new ServiceBusMessage("");
+            await sender.SendMessageAsync(message);
         }
     }
 }
