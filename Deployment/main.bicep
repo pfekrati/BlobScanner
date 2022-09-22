@@ -1,22 +1,30 @@
 param sourceStorageAccountId string
-param userAssignedManagedIdentity string = '${uniqueString(resourceGroup().id)}-mi'
-param logAnalyticsWorkspace string = '${uniqueString(resourceGroup().id)}-law'
-param applicationInsights string = '${uniqueString(resourceGroup().id)}-ai'
-param serviceBusNamespace string = 'sb${uniqueString(resourceGroup().id)}-ns'
-param eventGridTopic string = '${uniqueString(resourceGroup().id)}-topic'
-param quarantineStorageAccount string = '${uniqueString(resourceGroup().id)}q'
-param functionPlan string = '${uniqueString(resourceGroup().id)}-cp'
+@secure()
+param adminUsername string
+@secure()
+param adminPassword string
+
+param userAssignedManagedIdentityName string = '${uniqueString(resourceGroup().id)}-mi'
+param logAnalyticsWorkspaceName string = '${uniqueString(resourceGroup().id)}-law'
+param applicationInsightsName string = '${uniqueString(resourceGroup().id)}-ai'
+param serviceBusNamespaceName string = 'sb${uniqueString(resourceGroup().id)}-ns'
+param eventGridTopicName string = '${uniqueString(resourceGroup().id)}-topic'
+param quarantineStorageAccountName string = '${uniqueString(resourceGroup().id)}q'
+param functionPlanName string = '${uniqueString(resourceGroup().id)}-cp'
 param functionApp string = '${uniqueString(resourceGroup().id)}-f'
-param functionAppStorage string = '${uniqueString(resourceGroup().id)}f'
+param functionAppStorageAccountName string = '${uniqueString(resourceGroup().id)}f'
+param vnetName string = '${uniqueString(resourceGroup().id)}-net'
+param nicName string = '${uniqueString(resourceGroup().id)}-nic'
+param vmName string = '${uniqueString(resourceGroup().id)}-vm'
 param location string = resourceGroup().location
 
 resource identity 'Microsoft.ManagedIdentity/userAssignedIdentities@2022-01-31-preview' = {
-    name: userAssignedManagedIdentity
+    name: userAssignedManagedIdentityName
     location: location
 }
 
 resource logs 'Microsoft.OperationalInsights/workspaces@2021-12-01-preview' = {
-    name: logAnalyticsWorkspace
+    name: logAnalyticsWorkspaceName
     location: location
     properties: {
         sku: {
@@ -26,7 +34,7 @@ resource logs 'Microsoft.OperationalInsights/workspaces@2021-12-01-preview' = {
 }
 
 resource ai 'Microsoft.Insights/components@2020-02-02' = {
-    name: applicationInsights
+    name: applicationInsightsName
     location: location
     kind: 'web'
     properties: {
@@ -47,8 +55,8 @@ resource wb 'Microsoft.Insights/workbooks@2022-04-01' = {
     }
 }
 
-resource bus 'Microsoft.ServiceBus/namespaces@2022-01-01-preview' = {
-    name: serviceBusNamespace
+resource servicebus 'Microsoft.ServiceBus/namespaces@2022-01-01-preview' = {
+    name: serviceBusNamespaceName
     location: location
     sku: {
         name: 'Standard'
@@ -65,7 +73,7 @@ resource bus 'Microsoft.ServiceBus/namespaces@2022-01-01-preview' = {
 }
 
 resource events 'Microsoft.EventGrid/systemTopics@2022-06-15' = {
-    name: eventGridTopic
+    name: eventGridTopicName
     location: location
     properties: {
          source: sourceStorageAccountId
@@ -78,7 +86,7 @@ resource events 'Microsoft.EventGrid/systemTopics@2022-06-15' = {
             destination: {
                 endpointType: 'ServiceBusQueue'
                 properties: {
-                    resourceId: bus::filesQueue.id
+                    resourceId: servicebus::filesQueue.id
                 }                
             }
             filter: {
@@ -91,7 +99,7 @@ resource events 'Microsoft.EventGrid/systemTopics@2022-06-15' = {
 }
 
 resource quarantine 'Microsoft.Storage/storageAccounts@2022-05-01' = {
-    name: quarantineStorageAccount
+    name: quarantineStorageAccountName
     location: location
     sku: {
         name: 'Standard_LRS'
@@ -107,8 +115,8 @@ resource quarantine 'Microsoft.Storage/storageAccounts@2022-05-01' = {
     }
 }
 
-resource plan 'Microsoft.Web/serverfarms@2022-03-01' = {
-    name: functionPlan
+resource functionPlan 'Microsoft.Web/serverfarms@2022-03-01' = {
+    name: functionPlanName
     location: location
     kind: 'functionapp'
     sku: {
@@ -124,7 +132,7 @@ resource plan 'Microsoft.Web/serverfarms@2022-03-01' = {
 }
 
 resource functionStorage 'Microsoft.Storage/storageAccounts@2022-05-01' = {
-    name: functionAppStorage
+    name: functionAppStorageAccountName
     location: location
     sku: {
         name: 'Standard_LRS'
@@ -151,7 +159,7 @@ resource function 'Microsoft.Web/sites@2022-03-01' = {
     }
   }
   properties: {
-    serverFarmId: plan.id
+    serverFarmId: functionPlan.id
     siteConfig: {
       linuxFxVersion: 'dotnet|6.0'
     }
@@ -175,8 +183,86 @@ resource function 'Microsoft.Web/sites@2022-03-01' = {
         QuarantineContainerUrl: '${quarantine.properties.primaryEndpoints.blob}${quarantine::blob::container.name}'
         ServiceBusConnection__clientID: identity.properties.clientId
         ServiceBusConnection__credential: 'managedidentity'
-        ServiceBusConnection__fullyQualifiedNamespace: bus.name
-        ServiceBusQueue: bus::resultsqueue.name
+        ServiceBusConnection__fullyQualifiedNamespace: servicebus.name
+        ServiceBusQueue: servicebus::resultsqueue.name
     }
   }
+}
+
+resource vnet 'Microsoft.Network/virtualnetworks@2015-05-01-preview' = {
+    name: vnetName
+    location: location
+    properties: {        
+        addressSpace: {
+            addressPrefixes: [
+                '172.16.0.0/16'
+            ]
+        }
+    }
+
+    resource default 'subnets' = {
+        name: 'default'
+        properties: {
+            addressPrefix: '172.16.0.0/24'
+        }        
+    }
+}
+
+resource nic 'Microsoft.Network/networkInterfaces@2022-01-01' = {
+    name: nicName
+    location: location
+    properties: {
+        ipConfigurations: [
+            {
+                name: 'ipconfig1'
+                properties: {
+                    subnet: {
+                        id: vnet::default.id
+                    }
+                }
+            }
+        ]
+    }
+}
+
+resource vm 'Microsoft.Compute/virtualMachines@2022-03-01' = {
+    name: vmName
+    location: location
+    identity: {
+        type: 'UserAssigned'
+        userAssignedIdentities: {
+            '${identity.id}': {}
+        }
+    }
+    properties: {
+        hardwareProfile: {
+            vmSize: 'Standard_B4ms'
+        }
+        storageProfile: {
+            imageReference: {
+                publisher: 'microsoftwindowsdesktop'
+                offer: 'windows-11'
+                sku: 'win11-21h2-ent'
+                version: 'latest'
+            }
+            osDisk: {
+                createOption: 'FromImage'
+                managedDisk: {
+                    storageAccountType: 'Standard_LRS'
+                }
+            }
+        }
+        osProfile: {
+            computerName: 'scan-vm'
+            adminUsername: adminUsername
+            adminPassword: adminPassword
+        }
+        networkProfile: {
+            networkInterfaces: [
+                {
+                    id: nic.id
+                }
+            ]
+        }
+    }
 }
