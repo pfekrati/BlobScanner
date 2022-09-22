@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "BlobScanner.ResultProcessor": {
+      "commandName": "Project",
+      "environmentVariables": {
+        "ServiceBusQueue": "resultsqueue"
+      }
+    }
+  }
+}
