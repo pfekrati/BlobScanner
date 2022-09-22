@@ -29,31 +29,28 @@ namespace BlobScanner.ResultProcessor
             [HttpTrigger(AuthorizationLevel.Function, "post", Route = null)] HttpRequest req, ILogger log)
         {
             string requestBody = await new StreamReader(req.Body).ReadToEndAsync();
-            var results = JsonConvert.DeserializeObject<ScanResult[]>(requestBody);
-            await ProcessResults(results);
+            var result = JsonConvert.DeserializeObject<ScanResult>(requestBody);
+            await ProcessResults(result);
             return new OkResult();
         }
-        
+
         [FunctionName("ProcessServiceBus")]
         public async Task RunServiceBus([ServiceBusTrigger("%ServiceBusQueue%", Connection = "ServiceBusConnection")] string msg, ILogger log)
         {
-            var results = JsonConvert.DeserializeObject<ScanResult[]>(msg);
+            var results = JsonConvert.DeserializeObject<ScanResult>(msg);
             await ProcessResults(results);
         }
 
-        private async Task ProcessResults(ScanResult[] results)
+        private async Task ProcessResults(ScanResult result)
         {
-            logAnalyticsClient.SendTelemetry(JsonConvert.SerializeObject(results));
-            metricsClient.SendMetrics(results.Length, results.Count(x => x.IsThreat));
-
-            foreach (var result in results)
+            logAnalyticsClient.SendTelemetry(JsonConvert.SerializeObject(result));
+            metricsClient.SendMetrics(1, result.IsThreat ? 1 : 0);
+            if (result.IsThreat)
             {
-                if (result.IsThreat)
-                {
-                    result.Result = await quarantineClient.Quarantine(result.BlobUrl);
-                    logAnalyticsClient.SendTelemetry(JsonConvert.SerializeObject(result));
-                }
+                result.Result = await quarantineClient.Quarantine(result.BlobUrl);
+                logAnalyticsClient.SendTelemetry(JsonConvert.SerializeObject(result));
             }
         }
     }
 }
+
