@@ -35,6 +35,18 @@ resource ai 'Microsoft.Insights/components@2020-02-02' = {
     }
 }
 
+resource wb 'Microsoft.Insights/workbooks@2022-04-01' = {
+    name: guid(resourceGroup().id)
+    location: location
+    kind: 'shared'
+    properties: {
+        category: 'workbook'
+        displayName: 'Blob Scanner'                
+        serializedData: '{ "version": "Notebook/1.0", "items": [ { "type": 12, "content": { "version": "NotebookGroup/1.0", "groupType": "editable", "items": [ { "type": 1, "content": { "json": "<h1>Overview (last 7 days)</h1>" }, "name": "text - 0" }, { "type": 10, "content": { "chartId": "workbook34b61514-2a9c-4716-b4fa-2d4b57958d07", "version": "MetricsItem/2.0", "size": 4, "chartType": -1, "resourceType": "microsoft.insights/components", "metricScope": 0, "resourceIds": [ "${ai.id}" ], "timeContext": { "durationMs": 604800000 }, "metrics": [ { "namespace": "azure.applicationinsights", "metric": "azure.applicationinsights--FilesProcessed", "aggregation": 1, "columnName": "Files processed" }, { "namespace": "azure.applicationinsights", "metric": "azure.applicationinsights--ThreatsDetected", "aggregation": 1, "columnName": "Threats detected" } ], "gridFormatType": 1, "tileSettings": { "titleContent": { "columnMatch": "Metric", "formatter": 1 }, "leftContent": { "columnMatch": "Value", "formatter": 12, "formatOptions": { "palette": "auto" }, "numberFormat": { "unit": 17, "options": { "maximumSignificantDigits": 3, "maximumFractionDigits": 2 } } }, "showBorder": false }, "gridSettings": { "rowLimit": 10000 } }, "name": "metric - 1" } ] }, "name": "Overview" }, { "type": 12, "content": { "version": "NotebookGroup/1.0", "groupType": "editable", "items": [ { "type": 1, "content": { "json": "<h1>Logs</h1>" }, "name": "text - 0" }, { "type": 3, "content": { "version": "KqlItem/1.0", "query": "ScanResult_CL | sort by Timestamp_t desc | project Timestamp_t, BlobName_s, BlobUrl_s, IsThreat_b, Result_s", "size": 0, "timeContext": { "durationMs": 604800000 }, "queryType": 0, "resourceType": "microsoft.operationalinsights/workspaces", "crossComponentResources": [ "${logs.id}" ] }, "name": "query - 2" } ] }, "name": "Logs" } ], "isLocked": false, "fallbackResourceIds": [ "${ai.id}" ] }'
+        sourceId: ai.id        
+    }
+}
+
 resource bus 'Microsoft.ServiceBus/namespaces@2022-01-01-preview' = {
     name: serviceBusNamespace
     location: location
