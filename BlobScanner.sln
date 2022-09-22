@@ -7,6 +7,11 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BlobScanner.Console", "Blob
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BlobScanner.ResultProcessor", "BlobScanner.ResultProcessor\BlobScanner.ResultProcessor.csproj", "{F8B35700-68C4-46AA-B7CD-748EA8C4DF57}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Deployment", "Deployment", "{46A01F72-CDE8-4CF7-9562-4F6B5E287A53}"
+	ProjectSection(SolutionItems) = preProject
+		main.bicep = main.bicep
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
