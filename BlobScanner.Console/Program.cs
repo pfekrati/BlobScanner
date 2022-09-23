@@ -12,66 +12,45 @@ using Azure.Messaging.EventGrid;
 using BlobScanner.ConsoleApp.Model;
 using System.Collections.Generic;
 using System.Reflection.Metadata;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.ApplicationInsights;
 
 namespace BlobScanner.ConsoleApp
 {
     class Program
     {
-
         const string queueName = "filesqueue";
         const string resultsQueueName = "resultsqueue";
 
-        static BlobClient blobClient;
-        static ServiceBusClient serviceBusClient;
-        static ServiceBusSender sender;
-        static EventGridPublisherClient eventGridclient;
-
-        // handle received messages
-        static async Task MessageHandler(ProcessMessageEventArgs args)
-        {
-            try
-            {
-                Console.WriteLine($"New message recieved. Timestamp: {DateTime.Now}");
-                string body = args.Message.Body.ToString();
-
-                var convertedBody = JsonConvert.DeserializeObject<dynamic>(body);
-
-                string blobUrl = Convert.ToString(convertedBody.data.url);
-
-                Console.WriteLine($"Downloading file {blobUrl}");
-
-                await DownloadAndScanFile(blobUrl);
-
-                await args.CompleteMessageAsync(args.Message);
-            }
-            catch (Exception e)
-            {
-                Console.WriteLine(e.Message);
-                Console.WriteLine(e.ToString());
-                throw;
-            }
-
-        }
-
-        static Task ProcessErrorHandler(ProcessErrorEventArgs eventArgs)
-        {
-            // Write details about the error to the console window
-            Console.WriteLine($"an unhandled exception was encountered. This was not expected to happen.");
-            Console.WriteLine(eventArgs.Exception.Message);
-            return Task.CompletedTask;
-        }
+        static BlobClient _blobClient;
+        static ServiceBusClient _serviceBusClient;
+        static ServiceBusSender _serviceBusSnder;
+        static EventGridPublisherClient _eventGridclient;
+        static ILogger<Program> _logger;
+        static TelemetryClient _telemetryClient;
 
         static async Task Main(string[] args)
         {
+            System.AppDomain.CurrentDomain.UnhandledException += UnhandledExceptionTrapper;
 
             var serviceBusServer = args[0];
             var eventGridServer = args[1];
+            var appInsightsConnectionString = args[2];
 
-            serviceBusClient = new ServiceBusClient(serviceBusServer, new DefaultAzureCredential());
-            sender = serviceBusClient.CreateSender(resultsQueueName);
-            eventGridclient = new EventGridPublisherClient(new Uri(eventGridServer), new DefaultAzureCredential());
+            IServiceCollection services = new ServiceCollection();
 
-            ServiceBusProcessor processor = serviceBusClient.CreateProcessor(queueName, new ServiceBusProcessorOptions());
+            services.AddLogging(loggingBuilder => loggingBuilder.AddFilter<Microsoft.Extensions.Logging.ApplicationInsights.ApplicationInsightsLoggerProvider>("Category", LogLevel.Information));
+            services.AddApplicationInsightsTelemetryWorkerService(appInsightsConnectionString);
+            IServiceProvider serviceProvider = services.BuildServiceProvider();
+            _logger = serviceProvider.GetRequiredService<ILogger<Program>>();
+            var telemetryClient = serviceProvider.GetRequiredService<TelemetryClient>();
+
+            _serviceBusClient = new ServiceBusClient(serviceBusServer, new DefaultAzureCredential());
+            _serviceBusSnder = _serviceBusClient.CreateSender(resultsQueueName);
+            _eventGridclient = new EventGridPublisherClient(new Uri(eventGridServer), new DefaultAzureCredential());
+
+            ServiceBusProcessor processor = _serviceBusClient.CreateProcessor(queueName, new ServiceBusProcessorOptions());
 
 
             processor.ProcessMessageAsync += MessageHandler;
@@ -86,15 +65,40 @@ namespace BlobScanner.ConsoleApp
             await processor.StopProcessingAsync();
 
         }
+
+        static async Task MessageHandler(ProcessMessageEventArgs args)
+        {
+                Console.WriteLine($"New message recieved. Timestamp: {DateTime.Now}");
+                string body = args.Message.Body.ToString();
+
+                var convertedBody = JsonConvert.DeserializeObject<dynamic>(body);
+
+                string blobUrl = Convert.ToString(convertedBody.data.url);
+
+                Console.WriteLine($"Downloading file {blobUrl}");
+
+                await DownloadAndScanFile(blobUrl);
+
+                await args.CompleteMessageAsync(args.Message);
+        }
+
+        static Task ProcessErrorHandler(ProcessErrorEventArgs eventArgs)
+        {
+            Console.WriteLine($"an unhandled exception was encountered. This was not expected to happen.");
+            Console.WriteLine(eventArgs.Exception.ToString());
+            _logger.LogError(eventArgs.Exception, eventArgs.Exception.Message, DateTimeOffset.Now);
+            return Task.CompletedTask;
+        }
+
         static async Task DownloadAndScanFile(string blobUrl)
         {
             var uri = new Uri(blobUrl);
-            blobClient = new BlobClient(uri, new DefaultAzureCredential());
+            _blobClient = new BlobClient(uri, new DefaultAzureCredential());
             byte[] fileContent;
 
             using (var ms = new MemoryStream())
             {
-                await blobClient.DownloadToAsync(ms);
+                await _blobClient.DownloadToAsync(ms);
                 fileContent = ms.ToArray();
             }
 
@@ -106,34 +110,33 @@ namespace BlobScanner.ConsoleApp
 
             var resultModel = BuildResultModel(scanResult, blobUrl, blobUrl.Split("/").Last());
 
-            IDictionary<string, string> metadata = new Dictionary<string, string>();
-
-            metadata.Add("BlobScanner_ScanDateTime", scanResult.TimeStamp.ToString());
-            metadata.Add("BlobScanner_IsSafe", scanResult.IsSafe.ToString());
-            metadata.Add("BlobScanner_ScanResult", scanResult.Result.ToString());
-            metadata.Add("BlobScanner_DetectionEngine", scanResult.DetectionEngineInfo.DetectionEngine.ToString());
 
 
             Console.WriteLine($"Sending scan result message");
             await SendMessage(resultModel);
+
             if (!scanResult.IsSafe)
             {
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine($"File is infected. Scan result: {scanResult.Result}");
+                Console.ForegroundColor = ConsoleColor.White;
                 Console.WriteLine($"Sending integration event");
                 await SendIntegrationEvent(resultModel);
             }
+            else
+            {
+                IDictionary<string, string> metadata = new Dictionary<string, string>();
+                metadata.Add("BlobScanner_ScanDateTime", scanResult.TimeStamp.ToString());
+                metadata.Add("BlobScanner_IsSafe", scanResult.IsSafe.ToString());
+                metadata.Add("BlobScanner_ScanResult", scanResult.Result.ToString());
+                metadata.Add("BlobScanner_DetectionEngine", scanResult.DetectionEngineInfo.DetectionEngine.ToString());
+                await _blobClient.SetMetadataAsync(metadata);
+            }
 
-            await blobClient.SetMetadataAsync(metadata);
 
             Console.WriteLine($"Job completed successfully");
 
         }
-
-        static async Task SendMessage(ScanResultModel resultModel)
-        {
-            ServiceBusMessage message = new ServiceBusMessage(JsonConvert.SerializeObject(resultModel));
-            await sender.SendMessageAsync(message);
-        }
-
         static ScanResultModel BuildResultModel(ScanResult scanResult, string fileUrl, string fileName)
         {
             var resultModel = new ScanResultModel
@@ -148,6 +151,11 @@ namespace BlobScanner.ConsoleApp
             };
             return resultModel;
         }
+        static async Task SendMessage(ScanResultModel resultModel)
+        {
+            ServiceBusMessage message = new ServiceBusMessage(JsonConvert.SerializeObject(resultModel));
+            await _serviceBusSnder.SendMessageAsync(message);
+        }
 
         static async Task SendIntegrationEvent(ScanResultModel resultModel)
         {
@@ -157,7 +165,17 @@ namespace BlobScanner.ConsoleApp
                     "BlobScanner.InfectedFileFound",
                     "1.0",
                     JsonConvert.SerializeObject(resultModel));
-            await eventGridclient.SendEventAsync(egEvent);
+            await _eventGridclient.SendEventAsync(egEvent);
+        }
+
+        static void UnhandledExceptionTrapper(object sender, UnhandledExceptionEventArgs e)
+        {
+            Exception ex = (Exception)e.ExceptionObject;
+            _logger.LogError(ex, ex.Message, DateTimeOffset.Now);
+            Console.WriteLine(e.ExceptionObject.ToString());
+            Console.WriteLine("Press Enter to Exit");
+            Console.ReadLine();
+            Environment.Exit(0);
         }
     }
 }

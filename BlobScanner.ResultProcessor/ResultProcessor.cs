@@ -47,7 +47,7 @@ namespace BlobScanner.ResultProcessor
             metricsClient.SendMetrics(1, result.IsThreat ? 1 : 0);
             if (result.IsThreat)
             {
-                result.Result = await quarantineClient.Quarantine(result.BlobUrl);
+                result.Result = await quarantineClient.Quarantine(result);
                 logAnalyticsClient.SendTelemetry(JsonConvert.SerializeObject(result));
             }
         }

@@ -2,7 +2,7 @@
   "profiles": {
     "BlobScanner.Console": {
       "commandName": "Project",
-      "commandLineArgs": "blobscannerServiceBus.servicebus.windows.net https://blobscannerintegration.canadacentral-1.eventgrid.azure.net/api/events"
+      "commandLineArgs": "blobscannerServiceBus.servicebus.windows.net https://blobscannerintegration.canadacentral-1.eventgrid.azure.net/api/events InstrumentationKey=0520ba9d-4dd7-48b5-9160-9e9fe055f9cc;IngestionEndpoint=https://canadacentral-1.in.applicationinsights.azure.com/;LiveEndpoint=https://canadacentral.livediagnostics.monitor.azure.com/"
     }
   }
 }
