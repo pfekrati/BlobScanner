@@ -10,7 +10,7 @@ param applicationInsightsName string = '${uniqueString(resourceGroup().id)}-ai'
 param serviceBusNamespaceName string = 'sb${uniqueString(resourceGroup().id)}-ns'
 param eventGridTopicName string = '${uniqueString(resourceGroup().id)}-topic'
 param quarantineStorageAccountName string = '${uniqueString(resourceGroup().id)}q'
-param functionPlanName string = '${uniqueString(resourceGroup().id)}-cp'
+param functionPlanName string = '${uniqueString(resourceGroup().id)}-ep'
 param functionApp string = '${uniqueString(resourceGroup().id)}-f'
 param functionAppStorageAccountName string = '${uniqueString(resourceGroup().id)}f'
 param vnetName string = '${uniqueString(resourceGroup().id)}-net'
@@ -64,12 +64,32 @@ resource servicebus 'Microsoft.ServiceBus/namespaces@2022-01-01-preview' = {
     }
 
     resource filesQueue 'queues@2022-01-01-preview' = {
-        name: 'filesqueue'
+        name: 'filesqueue'    
     }
 
     resource resultsqueue 'queues@2022-01-01-preview' = {
       name: 'resultsqueue'
   }
+}
+
+resource receiverRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+    name: guid(resourceGroup().id, userAssignedManagedIdentityName, 'receiver')
+    scope: servicebus
+    properties: {
+        principalId: identity.properties.principalId
+        roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '4f6d3b9b-027b-4f4c-9142-0e5a2a2247e0') // Azure Service Bus Data Receiver
+        principalType: 'ServicePrincipal'
+    }
+}
+
+resource senderRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+    name: guid(resourceGroup().id, userAssignedManagedIdentityName, 'sender')
+    scope: servicebus
+    properties: {
+        principalId: identity.properties.principalId
+        roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '69a216fc-b8fb-44d8-bc22-1f3c2cd27a39') // Azure Service Bus Data Sender
+        principalType: 'ServicePrincipal'
+    }
 }
 
 resource events 'Microsoft.EventGrid/systemTopics@2022-06-15' = {
@@ -118,18 +138,34 @@ resource quarantine 'Microsoft.Storage/storageAccounts@2022-05-01' = {
 resource functionPlan 'Microsoft.Web/serverfarms@2022-03-01' = {
     name: functionPlanName
     location: location
-    kind: 'functionapp'
+    kind: 'elastic'
     sku: {
-        name: 'Y1'
-        tier: 'Dynamic'
-        size: 'Y1'
-        family: 'Y'
-        capacity: 0
+        name: 'EP1'
+        tier: 'ElasticPremium'
+        size: 'EP1'
+        family: 'EP'
+        capacity: 1
     }
     properties: {
         reserved: true // Linux
     }
 }
+
+// resource functionPlan 'Microsoft.Web/serverfarms@2022-03-01' = {
+//     name: functionPlanName
+//     location: location
+//     kind: 'functionapp'
+//     sku: {
+//         name: 'Y1'
+//         tier: 'Dynamic'
+//         size: 'Y1'
+//         family: 'Y'
+//         capacity: 0
+//     }
+//     properties: {
+//         reserved: true // Linux
+//     }
+// }
 
 resource functionStorage 'Microsoft.Storage/storageAccounts@2022-05-01' = {
     name: functionAppStorageAccountName
@@ -183,7 +219,7 @@ resource function 'Microsoft.Web/sites@2022-03-01' = {
         QuarantineContainerUrl: '${quarantine.properties.primaryEndpoints.blob}${quarantine::blob::container.name}'
         ServiceBusConnection__clientID: identity.properties.clientId
         ServiceBusConnection__credential: 'managedidentity'
-        ServiceBusConnection__fullyQualifiedNamespace: servicebus.name
+        ServiceBusConnection__fullyQualifiedNamespace: '${servicebus.name}.servicebus.windows.net'
         ServiceBusQueue: servicebus::resultsqueue.name
     }
   }
