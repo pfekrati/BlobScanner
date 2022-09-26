@@ -27,4 +27,7 @@ az group deployment create -g blobscanner-rg --template-file .\main.bicep --para
 
 8 - Run the BlobScanner.ConsoleApp.exe file using  following 3 arguments. 1)Servie Bus Endpoint, 2) Integration Event Grid Topic Endpoint and 3) Application Insights
 Connection String. (all can be collected from the resources created in step 3.
-Example: c:\blobscanner\BlobScanner.ConsoleApp.exe yourServiceBusName.servicebus.windows.net https://yourIntegrationEventGridName.canadacentral-1.eventgrid.azure.net/api/events InstrumentationKey=xxxxxxxxxxxxxxxxxxxxxxxxxx;IngestionEndpoint=https://canadacentral-1.in.applicationinsights.azure.com/;LiveEndpoint=https://canadacentral.livediagnostics.monitor.azure.com/
+Example: 
+```
+c:\blobscanner\BlobScanner.ConsoleApp.exe yourServiceBusName.servicebus.windows.net https://yourIntegrationEventGridName.canadacentral-1.eventgrid.azure.net/api/events InstrumentationKey=xxxxxxxxxxxxxxxxxxxxxxxxxx;IngestionEndpoint=https://canadacentral-1.in.applicationinsights.azure.com/;LiveEndpoint=https://canadacentral.livediagnostics.monitor.azure.com/
+```
