@@ -12,6 +12,11 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Deployment", "Deployment", 
 		main.bicep = main.bicep
 	EndProjectSection
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Release Packages", "Release Packages", "{03F37FCC-CBF7-4060-9EB5-A2D62EC00163}"
+	ProjectSection(SolutionItems) = preProject
+		BlobScanner.Console\bin\Debug\net6.0-windows\BlobScannerClient-latest.zip = BlobScanner.Console\bin\Debug\net6.0-windows\BlobScannerClient-latest.zip
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
